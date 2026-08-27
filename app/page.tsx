@@ -50,7 +50,7 @@ import {
 } from "@/lib/lastro";
 
 type ImportState = ReturnType<typeof parseAnnualRevenueCsv> | null;
-type Screen = "dashboard" | "contratos" | "fontes" | "extratos" | "saidas" | "importacao";
+type Screen = "dashboard" | "contratos" | "fontes" | "gastos" | "extratos" | "saidas" | "importacao";
 type FiscalMonthStatus = "pending" | "invoice_requested" | "tax_paid";
 type RecurringStatus = "ativo" | "inativo";
 type ManualIncomeSource = { id: string; name: string; monthlyAmount: number; status: RecurringStatus; notes?: string };
@@ -549,6 +549,7 @@ export default function Home() {
     dashboard: "Dashboard",
     contratos: "Contratos",
     fontes: "Fontes de renda",
+    gastos: "Gastos fixos",
     extratos: "Extratos",
     saidas: "Saídas PJ → PF",
     importacao: "Importação"
@@ -571,11 +572,12 @@ export default function Home() {
             <NavButton active={screen === "dashboard"} icon={<BadgeDollarSign size={16} />} label="Dashboard" onClick={() => setScreen("dashboard")} />
             <NavButton active={screen === "contratos"} icon={<BriefcaseBusiness size={16} />} label="Contratos" onClick={() => setScreen("contratos")} />
             <NavButton active={screen === "fontes"} icon={<BadgeDollarSign size={16} />} label="Fontes de renda" onClick={() => setScreen("fontes")} />
+            <NavButton active={screen === "gastos"} icon={<FileSpreadsheet size={16} />} label="Gastos fixos" onClick={() => setScreen("gastos")} />
             <NavButton active={screen === "extratos"} icon={<FileSpreadsheet size={16} />} label="Extratos" onClick={() => setScreen("extratos")} />
             <NavButton active={screen === "saidas"} icon={<BadgeDollarSign size={16} />} label="Saídas PJ → PF" onClick={() => setScreen("saidas")} />
             <NavButton active={screen === "importacao"} icon={<Upload size={16} />} label="Importação" onClick={() => setScreen("importacao")} />
             <div className="px-3 pt-5 text-[11px] uppercase text-muted-foreground">Próximas fases</div>
-            {["Cartões", "Gastos fixos"].map((item) => (
+            {["Cartões"].map((item) => (
               <button key={item} className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-muted-foreground">
                 {item}
                 <span className="text-[10px] uppercase">em breve</span>
@@ -619,7 +621,8 @@ export default function Home() {
               onToggleContractStatus={toggleContractStatus}
             />
           )}
-          {screen === "fontes" && <IncomeSourcesScreen contractSources={incomeSourceSummaries.filter((source) => source.kind === "contract")} expenseForm={expenseForm} fixedExpenses={fixedExpenses} fixedMonthlyTotal={fixedMonthlyTotal} incomeForm={incomeForm} manualIncomeSources={manualIncomeSources} onAddExpense={addFixedExpense} onAddIncome={addManualIncomeSource} onExpenseFormChange={setExpenseForm} onExpenseUpdate={updateFixedExpense} onIncomeFormChange={setIncomeForm} onIncomeUpdate={updateManualIncomeSource} />}
+          {screen === "fontes" && <IncomeSourcesScreen contractSources={incomeSourceSummaries.filter((source) => source.kind === "contract")} incomeForm={incomeForm} manualIncomeSources={manualIncomeSources} onAddIncome={addManualIncomeSource} onIncomeFormChange={setIncomeForm} onIncomeUpdate={updateManualIncomeSource} />}
+          {screen === "gastos" && <FixedExpensesScreen expenseForm={expenseForm} fixedExpenses={fixedExpenses} fixedMonthlyTotal={fixedMonthlyTotal} onAddExpense={addFixedExpense} onExpenseFormChange={setExpenseForm} onExpenseUpdate={updateFixedExpense} />}
           {screen === "extratos" && (
             <StatementsScreen
               agencies={agencies}
@@ -746,15 +749,9 @@ function Dashboard({ activeContracts, contractsForYear, fiscalStatuses, fixedMon
 
 function IncomeSourcesScreen(props: {
   contractSources: IncomeSourceSummary[];
-  expenseForm: { name: string; monthlyAmount: string };
-  fixedExpenses: FixedExpense[];
-  fixedMonthlyTotal: number;
   incomeForm: { name: string; monthlyAmount: string };
   manualIncomeSources: ManualIncomeSource[];
-  onAddExpense: () => void;
   onAddIncome: () => void;
-  onExpenseFormChange: (value: { name: string; monthlyAmount: string }) => void;
-  onExpenseUpdate: (id: string, patch: Partial<FixedExpense>) => void;
   onIncomeFormChange: (value: { name: string; monthlyAmount: string }) => void;
   onIncomeUpdate: (id: string, patch: Partial<ManualIncomeSource>) => void;
 }) {
@@ -766,53 +763,70 @@ function IncomeSourcesScreen(props: {
       <section className="grid gap-3 md:grid-cols-3">
         <Kpi title="Contratos ativos" value={formatBRL(activeContractTotal)} helper="fontes automáticas" />
         <Kpi title="Fontes manuais" value={formatBRL(activeManualTotal)} helper="aluguel e outras rendas" />
-        <Kpi title="Gastos fixos" value={formatBRL(props.fixedMonthlyTotal)} helper="mensal ativo" />
+        <Kpi title="Total mensal" value={formatBRL(activeContractTotal + activeManualTotal)} helper="renda recorrente ativa" />
       </section>
 
-      <section className="grid gap-3 xl:grid-cols-2">
-        <div className="rounded-md border border-border bg-card p-4">
-          <div className="mb-3"><h3 className="font-semibold">Adicionar fonte manual</h3><p className="text-sm text-muted-foreground">Use para aluguel, rendimentos e outras entradas recorrentes.</p></div>
-          <div className="grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
-            <input className="h-9 rounded-md border border-border bg-background px-3 text-sm" placeholder="Nome da fonte" value={props.incomeForm.name} onChange={(event) => props.onIncomeFormChange({ ...props.incomeForm, name: event.target.value })} />
-            <input className="h-9 rounded-md border border-border bg-background px-3 text-right text-sm tabular" placeholder="Valor mensal" value={props.incomeForm.monthlyAmount} onChange={(event) => props.onIncomeFormChange({ ...props.incomeForm, monthlyAmount: event.target.value })} />
-            <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground" onClick={props.onAddIncome}><Plus size={16} /> Adicionar</button>
-          </div>
-        </div>
-
-        <div className="rounded-md border border-border bg-card p-4">
-          <div className="mb-3"><h3 className="font-semibold">Adicionar gasto fixo</h3><p className="text-sm text-muted-foreground">Use para visualizar recebimentos mensais menos compromissos fixos.</p></div>
-          <div className="grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
-            <input className="h-9 rounded-md border border-border bg-background px-3 text-sm" placeholder="Nome do gasto" value={props.expenseForm.name} onChange={(event) => props.onExpenseFormChange({ ...props.expenseForm, name: event.target.value })} />
-            <input className="h-9 rounded-md border border-border bg-background px-3 text-right text-sm tabular" placeholder="Valor mensal" value={props.expenseForm.monthlyAmount} onChange={(event) => props.onExpenseFormChange({ ...props.expenseForm, monthlyAmount: event.target.value })} />
-            <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground" onClick={props.onAddExpense}><Plus size={16} /> Adicionar</button>
-          </div>
+      <section className="rounded-md border border-border bg-card p-4">
+        <div className="mb-3"><h3 className="font-semibold">Adicionar fonte manual</h3><p className="text-sm text-muted-foreground">Use para aluguel, rendimentos e outras entradas recorrentes.</p></div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
+          <input className="h-9 rounded-md border border-border bg-background px-3 text-sm" placeholder="Nome da fonte" value={props.incomeForm.name} onChange={(event) => props.onIncomeFormChange({ ...props.incomeForm, name: event.target.value })} />
+          <input className="h-9 rounded-md border border-border bg-background px-3 text-right text-sm tabular" placeholder="Valor mensal" value={props.incomeForm.monthlyAmount} onChange={(event) => props.onIncomeFormChange({ ...props.incomeForm, monthlyAmount: event.target.value })} />
+          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground" onClick={props.onAddIncome}><Plus size={16} /> Adicionar</button>
         </div>
       </section>
 
-      <section className="grid gap-3 xl:grid-cols-2">
-        <div className="rounded-md border border-border bg-card">
-          <div className="border-b border-border p-4"><h3 className="font-semibold">Fontes de renda</h3><p className="text-sm text-muted-foreground">Contratos vêm sincronizados; fontes manuais podem ser ativadas ou pausadas.</p></div>
-          <div className="overflow-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead className="bg-muted text-xs text-muted-foreground"><tr><th className="px-3 py-2 text-left">Fonte</th><th className="px-3 py-2 text-left">Tipo</th><th className="px-3 py-2 text-right">Mensal</th><th className="px-3 py-2 text-left">Status</th></tr></thead>
-              <tbody>
-                {props.contractSources.map((source) => <tr key={source.id} className="border-t border-border"><td className="px-3 py-2"><div className="font-medium">{source.name}</div><div className="text-xs text-muted-foreground">{source.detail}</div></td><td className="px-3 py-2 text-muted-foreground">contrato</td><td className="px-3 py-2 text-right tabular">{formatBRL(source.monthlyAmount)}</td><td className="px-3 py-2"><span className="rounded-sm border border-border px-2 py-1 text-xs">{source.status}</span></td></tr>)}
-                {props.manualIncomeSources.map((source) => <tr key={source.id} className="border-t border-border"><td className="px-3 py-2"><input className="h-8 w-full rounded-sm border border-border bg-background px-2" value={source.name} onChange={(event) => props.onIncomeUpdate(source.id, { name: event.target.value })} /></td><td className="px-3 py-2 text-muted-foreground">manual</td><td className="px-3 py-2 text-right"><input className="h-8 w-32 rounded-sm border border-border bg-background px-2 text-right tabular" value={source.monthlyAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={(event) => props.onIncomeUpdate(source.id, { monthlyAmount: parseBrazilianMoney(event.target.value) })} /></td><td className="px-3 py-2"><button className={source.status === "ativo" ? "h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" : "h-8 rounded-md border border-border px-3 text-xs text-muted-foreground"} onClick={() => props.onIncomeUpdate(source.id, { status: source.status === "ativo" ? "inativo" : "ativo" })}>{source.status === "ativo" ? "Ativo" : "Reativar"}</button></td></tr>)}
-              </tbody>
-            </table>
-          </div>
+      <section className="rounded-md border border-border bg-card">
+        <div className="border-b border-border p-4"><h3 className="font-semibold">Fontes de renda</h3><p className="text-sm text-muted-foreground">Contratos vêm sincronizados; fontes manuais podem ser ativadas ou pausadas.</p></div>
+        <div className="overflow-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-muted text-xs text-muted-foreground"><tr><th className="px-3 py-2 text-left">Fonte</th><th className="px-3 py-2 text-left">Tipo</th><th className="px-3 py-2 text-right">Mensal</th><th className="px-3 py-2 text-left">Status</th></tr></thead>
+            <tbody>
+              {props.contractSources.map((source) => <tr key={source.id} className="border-t border-border"><td className="px-3 py-2"><div className="font-medium">{source.name}</div><div className="text-xs text-muted-foreground">{source.detail}</div></td><td className="px-3 py-2 text-muted-foreground">contrato</td><td className="px-3 py-2 text-right tabular">{formatBRL(source.monthlyAmount)}</td><td className="px-3 py-2"><span className="rounded-sm border border-border px-2 py-1 text-xs">{source.status}</span></td></tr>)}
+              {props.manualIncomeSources.map((source) => <tr key={source.id} className="border-t border-border"><td className="px-3 py-2"><input className="h-8 w-full rounded-sm border border-border bg-background px-2" value={source.name} onChange={(event) => props.onIncomeUpdate(source.id, { name: event.target.value })} /></td><td className="px-3 py-2 text-muted-foreground">manual</td><td className="px-3 py-2 text-right"><input className="h-8 w-32 rounded-sm border border-border bg-background px-2 text-right tabular" value={source.monthlyAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={(event) => props.onIncomeUpdate(source.id, { monthlyAmount: parseBrazilianMoney(event.target.value) })} /></td><td className="px-3 py-2"><button className={source.status === "ativo" ? "h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" : "h-8 rounded-md border border-border px-3 text-xs text-muted-foreground"} onClick={() => props.onIncomeUpdate(source.id, { status: source.status === "ativo" ? "inativo" : "ativo" })}>{source.status === "ativo" ? "Ativo" : "Reativar"}</button></td></tr>)}
+            </tbody>
+          </table>
         </div>
+      </section>
+    </div>
+  );
+}
 
-        <div className="rounded-md border border-border bg-card">
-          <div className="border-b border-border p-4"><h3 className="font-semibold">Gastos fixos</h3><p className="text-sm text-muted-foreground">Entram no dashboard como redutor da média mensal.</p></div>
-          <div className="overflow-auto">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead className="bg-muted text-xs text-muted-foreground"><tr><th className="px-3 py-2 text-left">Gasto</th><th className="px-3 py-2 text-right">Mensal</th><th className="px-3 py-2 text-left">Status</th></tr></thead>
-              <tbody>
-                {props.fixedExpenses.length === 0 ? <tr><td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">Nenhum gasto fixo cadastrado.</td></tr> : props.fixedExpenses.map((expense) => <tr key={expense.id} className="border-t border-border"><td className="px-3 py-2"><input className="h-8 w-full rounded-sm border border-border bg-background px-2" value={expense.name} onChange={(event) => props.onExpenseUpdate(expense.id, { name: event.target.value })} /></td><td className="px-3 py-2 text-right"><input className="h-8 w-32 rounded-sm border border-border bg-background px-2 text-right tabular" value={expense.monthlyAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={(event) => props.onExpenseUpdate(expense.id, { monthlyAmount: parseBrazilianMoney(event.target.value) })} /></td><td className="px-3 py-2"><button className={expense.status === "ativo" ? "h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" : "h-8 rounded-md border border-border px-3 text-xs text-muted-foreground"} onClick={() => props.onExpenseUpdate(expense.id, { status: expense.status === "ativo" ? "inativo" : "ativo" })}>{expense.status === "ativo" ? "Ativo" : "Reativar"}</button></td></tr>)}
-              </tbody>
-            </table>
-          </div>
+function FixedExpensesScreen(props: {
+  expenseForm: { name: string; monthlyAmount: string };
+  fixedExpenses: FixedExpense[];
+  fixedMonthlyTotal: number;
+  onAddExpense: () => void;
+  onExpenseFormChange: (value: { name: string; monthlyAmount: string }) => void;
+  onExpenseUpdate: (id: string, patch: Partial<FixedExpense>) => void;
+}) {
+  const inactiveTotal = props.fixedExpenses.filter((expense) => expense.status === "inativo").reduce((sum, expense) => sum + expense.monthlyAmount, 0);
+
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-3 md:grid-cols-3">
+        <Kpi title="Gastos ativos" value={formatBRL(props.fixedMonthlyTotal)} helper="mensal recorrente" />
+        <Kpi title="Gastos pausados" value={formatBRL(inactiveTotal)} helper="inativos" />
+        <Kpi title="Itens cadastrados" value={String(props.fixedExpenses.length)} helper="controle mensal" />
+      </section>
+
+      <section className="rounded-md border border-border bg-card p-4">
+        <div className="mb-3"><h3 className="font-semibold">Adicionar gasto fixo</h3><p className="text-sm text-muted-foreground">Compromissos recorrentes entram no dashboard como redutor da média mensal.</p></div>
+        <div className="grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
+          <input className="h-9 rounded-md border border-border bg-background px-3 text-sm" placeholder="Nome do gasto" value={props.expenseForm.name} onChange={(event) => props.onExpenseFormChange({ ...props.expenseForm, name: event.target.value })} />
+          <input className="h-9 rounded-md border border-border bg-background px-3 text-right text-sm tabular" placeholder="Valor mensal" value={props.expenseForm.monthlyAmount} onChange={(event) => props.onExpenseFormChange({ ...props.expenseForm, monthlyAmount: event.target.value })} />
+          <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground" onClick={props.onAddExpense}><Plus size={16} /> Adicionar</button>
+        </div>
+      </section>
+
+      <section className="rounded-md border border-border bg-card">
+        <div className="border-b border-border p-4"><h3 className="font-semibold">Gastos fixos</h3><p className="text-sm text-muted-foreground">Ative, pause e edite os custos mensais recorrentes.</p></div>
+        <div className="overflow-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="bg-muted text-xs text-muted-foreground"><tr><th className="px-3 py-2 text-left">Gasto</th><th className="px-3 py-2 text-right">Mensal</th><th className="px-3 py-2 text-left">Status</th></tr></thead>
+            <tbody>
+              {props.fixedExpenses.length === 0 ? <tr><td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">Nenhum gasto fixo cadastrado.</td></tr> : props.fixedExpenses.map((expense) => <tr key={expense.id} className="border-t border-border"><td className="px-3 py-2"><input className="h-8 w-full rounded-sm border border-border bg-background px-2" value={expense.name} onChange={(event) => props.onExpenseUpdate(expense.id, { name: event.target.value })} /></td><td className="px-3 py-2 text-right"><input className="h-8 w-32 rounded-sm border border-border bg-background px-2 text-right tabular" value={expense.monthlyAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={(event) => props.onExpenseUpdate(expense.id, { monthlyAmount: parseBrazilianMoney(event.target.value) })} /></td><td className="px-3 py-2"><button className={expense.status === "ativo" ? "h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" : "h-8 rounded-md border border-border px-3 text-xs text-muted-foreground"} onClick={() => props.onExpenseUpdate(expense.id, { status: expense.status === "ativo" ? "inativo" : "ativo" })}>{expense.status === "ativo" ? "Ativo" : "Reativar"}</button></td></tr>)}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
