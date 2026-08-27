@@ -103,31 +103,75 @@ export default function Home() {
   });
   const storageReady = useRef(false);
 
+  function applyBackup(parsed: LastroBackup) {
+    if (Array.isArray(parsed.agencies)) setAgencies(parsed.agencies);
+    if (Array.isArray(parsed.clients)) setClients(parsed.clients);
+    if (Array.isArray(parsed.contracts)) setContracts(parsed.contracts);
+    if (Array.isArray(parsed.payments)) setPayments(parsed.payments);
+    if (Array.isArray(parsed.distributions)) setDistributions(parsed.distributions);
+    if (parsed.taxSettings) setTaxSettings(parsed.taxSettings);
+    if (parsed.fiscalStatuses) setFiscalStatuses(parsed.fiscalStatuses);
+    if (Array.isArray(parsed.manualIncomeSources)) setManualIncomeSources(parsed.manualIncomeSources);
+    if (Array.isArray(parsed.fixedExpenses)) setFixedExpenses(parsed.fixedExpenses);
+  }
+
+  function currentBackup(): LastroBackup {
+    return { version: 1, exportedAt: new Date().toISOString(), agencies, clients, contracts, payments, distributions, taxSettings, fiscalStatuses, manualIncomeSources, fixedExpenses };
+  }
+
+  async function persistBackup(backup: LastroBackup) {
+    window.localStorage.setItem(storageKey, JSON.stringify(backup));
+    try {
+      await fetch("/api/state", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backup)
+      });
+    } catch {
+      // Local storage keeps the app usable if the local server API is temporarily unavailable.
+    }
+  }
+
   useEffect(() => {
-    const raw = window.localStorage.getItem(storageKey);
-    if (raw) {
+    let cancelled = false;
+
+    async function loadState() {
+      let localBackup: LastroBackup | null = null;
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        try {
+          localBackup = JSON.parse(raw) as LastroBackup;
+        } catch {
+          window.localStorage.removeItem(storageKey);
+        }
+      }
+
       try {
-        const parsed = JSON.parse(raw) as LastroBackup;
-        if (Array.isArray(parsed.agencies)) setAgencies(parsed.agencies);
-        if (Array.isArray(parsed.clients)) setClients(parsed.clients);
-        if (Array.isArray(parsed.contracts)) setContracts(parsed.contracts);
-        if (Array.isArray(parsed.payments)) setPayments(parsed.payments);
-        if (Array.isArray(parsed.distributions)) setDistributions(parsed.distributions);
-        if (parsed.taxSettings) setTaxSettings(parsed.taxSettings);
-        if (parsed.fiscalStatuses) setFiscalStatuses(parsed.fiscalStatuses);
-        if (Array.isArray(parsed.manualIncomeSources)) setManualIncomeSources(parsed.manualIncomeSources);
-        if (Array.isArray(parsed.fixedExpenses)) setFixedExpenses(parsed.fixedExpenses);
+        const response = await fetch("/api/state", { cache: "no-store" });
+        const result = (await response.json()) as { state?: LastroBackup | null };
+        if (cancelled) return;
+        if (result.state) {
+          applyBackup(result.state);
+        } else if (localBackup) {
+          applyBackup(localBackup);
+          await persistBackup(localBackup);
+        }
       } catch {
-        window.localStorage.removeItem(storageKey);
+        if (!cancelled && localBackup) applyBackup(localBackup);
+      } finally {
+        if (!cancelled) storageReady.current = true;
       }
     }
-    storageReady.current = true;
+
+    void loadState();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!storageReady.current) return;
-    const backup: LastroBackup = { version: 1, exportedAt: new Date().toISOString(), agencies, clients, contracts, payments, distributions, taxSettings, fiscalStatuses, manualIncomeSources, fixedExpenses };
-    window.localStorage.setItem(storageKey, JSON.stringify(backup));
+    void persistBackup(currentBackup());
   }, [agencies, clients, contracts, payments, distributions, taxSettings, fiscalStatuses, manualIncomeSources, fixedExpenses]);
 
   const availableYears = useMemo(() => {
@@ -395,7 +439,7 @@ export default function Home() {
   }
 
   function exportBackup() {
-    const backup: LastroBackup = { version: 1, exportedAt: new Date().toISOString(), agencies, clients, contracts, payments, distributions, taxSettings, fiscalStatuses, manualIncomeSources, fixedExpenses };
+    const backup = currentBackup();
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -412,15 +456,8 @@ export default function Home() {
       try {
         const parsed = JSON.parse(String(reader.result)) as LastroBackup;
         if (!Array.isArray(parsed.agencies) || !Array.isArray(parsed.clients) || !Array.isArray(parsed.contracts) || !Array.isArray(parsed.payments)) return;
-        setAgencies(parsed.agencies);
-        setClients(parsed.clients);
-        setContracts(parsed.contracts);
-        setPayments(parsed.payments);
-        if (Array.isArray(parsed.distributions)) setDistributions(parsed.distributions);
-        if (parsed.taxSettings) setTaxSettings(parsed.taxSettings);
-        if (parsed.fiscalStatuses) setFiscalStatuses(parsed.fiscalStatuses);
-        if (Array.isArray(parsed.manualIncomeSources)) setManualIncomeSources(parsed.manualIncomeSources);
-        if (Array.isArray(parsed.fixedExpenses)) setFixedExpenses(parsed.fixedExpenses);
+        applyBackup(parsed);
+        void persistBackup(parsed);
       } catch {
         return;
       }
@@ -622,6 +659,7 @@ function Dashboard({ activeContracts, contractsForYear, fiscalStatuses, fixedMon
   const activeIncomeSources = incomeSources.filter((source) => source.status === "ativo");
   const monthlyIncomeSourcesTotal = activeIncomeSources.reduce((sum, source) => sum + source.monthlyAmount, 0);
   const sourceMax = Math.max(...activeIncomeSources.map((source) => source.monthlyAmount), 1);
+  const [hoveredMonth, setHoveredMonth] = useState<number | null>(null);
 
   return (
     <div className="space-y-5">
@@ -638,17 +676,21 @@ function Dashboard({ activeContracts, contractsForYear, fiscalStatuses, fixedMon
             <div><h3 className="font-semibold">Recebimentos mensais</h3><p className="text-sm text-muted-foreground">Contratos do extrato + fontes manuais ativas em {year}.</p></div>
             <span className="rounded-sm border border-border px-2 py-1 text-xs text-muted-foreground">{preview ? String(preview.payments.length) + " importações na prévia" : "sem prévia"}</span>
           </div>
-          <div className="flex h-64 items-end gap-2 border-b border-border pb-3">
+          <div className="flex h-64 items-end gap-2 border-b border-border pb-3" onMouseLeave={() => setHoveredMonth(null)}>
             {incomeMonthTotals.map((total, index) => {
               const height = Math.max((total / chartMax) * 100, total > 0 ? 4 : 0);
               const isElapsed = monthsToAverage === 0 ? false : index < monthsToAverage;
+              const isHovered = hoveredMonth === index;
+              const hasHover = hoveredMonth !== null;
+              const barClass = isElapsed ? "bg-primary" : "bg-muted-foreground/30";
               return (
-                <div key={months[index]} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                  <div className="flex h-52 w-full items-end rounded-sm bg-muted/50 px-1">
-                    <div className={isElapsed ? "w-full rounded-sm bg-primary" : "w-full rounded-sm bg-muted-foreground/30"} style={{ height: String(height) + "%" }} title={months[index] + ": " + formatBRL(total)} />
+                <button key={months[index]} className={("group flex min-w-0 flex-1 flex-col items-center gap-2 outline-none transition-opacity " + (hasHover && !isHovered ? "opacity-35" : "opacity-100"))} onMouseEnter={() => setHoveredMonth(index)} onFocus={() => setHoveredMonth(index)} type="button" aria-label={months[index] + ": " + formatBRL(total)}>
+                  <div className={("relative flex h-52 w-full items-end rounded-sm bg-muted/50 px-1 transition-all " + (isHovered ? "ring-1 ring-primary" : ""))}>
+                    {isHovered && <div className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-sm border border-border bg-card px-2 py-1 text-xs font-semibold tabular shadow-sm whitespace-nowrap">{months[index].slice(0, 3)}: {formatBRL(total)}</div>}
+                    <div className={("w-full rounded-sm transition-all " + barClass + " " + (isHovered ? "brightness-125" : ""))} style={{ height: String(height) + "%" }} />
                   </div>
-                  <span className="text-[11px] uppercase text-muted-foreground">{months[index].slice(0, 3)}</span>
-                </div>
+                  <span className={("text-[11px] uppercase " + (isHovered ? "font-semibold text-foreground" : "text-muted-foreground"))}>{months[index].slice(0, 3)}</span>
+                </button>
               );
             })}
           </div>
