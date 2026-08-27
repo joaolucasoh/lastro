@@ -54,7 +54,9 @@ type Screen = "dashboard" | "contratos" | "fontes" | "gastos" | "extratos" | "sa
 type FiscalMonthStatus = "pending" | "invoice_requested" | "tax_paid";
 type RecurringStatus = "ativo" | "inativo";
 type ManualIncomeSource = { id: string; name: string; monthlyAmount: number; status: RecurringStatus; notes?: string };
-type FixedExpense = { id: string; name: string; monthlyAmount: number; status: RecurringStatus; notes?: string };
+type ExpensePaymentMethod = "cartao" | "boleto" | "pix" | "debito_automatico" | "transferencia" | "dinheiro" | "outro";
+type ExpenseCategory = "moradia" | "alimentacao" | "educacao" | "saude" | "lazer" | "assinatura" | "impostos" | "taxas" | "transporte" | "seguros" | "servicos" | "familia" | "outros";
+type FixedExpense = { id: string; name: string; monthlyAmount: number; status: RecurringStatus; paymentMethod?: ExpensePaymentMethod; category?: ExpenseCategory; notes?: string };
 type IncomeSourceSummary = { id: string; name: string; kind: "contract" | "manual"; monthlyAmount: number; annualAmount: number; status: RecurringStatus; detail: string };
 type LastroBackup = { version: 1; exportedAt: string; agencies: Agency[]; clients: Client[]; contracts: Contract[]; payments: Payment[]; distributions?: Distribution[]; taxSettings?: TaxSettings; fiscalStatuses?: Record<string, FiscalMonthStatus>; manualIncomeSources?: ManualIncomeSource[]; fixedExpenses?: FixedExpense[] };
 
@@ -67,6 +69,32 @@ const fiscalStatusLabel: Record<FiscalMonthStatus, string> = {
   tax_paid: "Imposto pago"
 };
 const seedManualIncomeSources: ManualIncomeSource[] = [{ id: "income_rent", name: "Aluguel", monthlyAmount: 0, status: "ativo" }];
+const expensePaymentMethods: Array<{ value: ExpensePaymentMethod; label: string }> = [
+  { value: "cartao", label: "Cartão" },
+  { value: "boleto", label: "Boleto" },
+  { value: "pix", label: "Pix" },
+  { value: "debito_automatico", label: "Débito automático" },
+  { value: "transferencia", label: "Transferência" },
+  { value: "dinheiro", label: "Dinheiro" },
+  { value: "outro", label: "Outro" }
+];
+const expenseCategories: Array<{ value: ExpenseCategory; label: string }> = [
+  { value: "moradia", label: "Moradia" },
+  { value: "alimentacao", label: "Alimentação" },
+  { value: "educacao", label: "Educação" },
+  { value: "saude", label: "Saúde" },
+  { value: "lazer", label: "Lazer" },
+  { value: "assinatura", label: "Assinatura" },
+  { value: "impostos", label: "Impostos" },
+  { value: "taxas", label: "Taxas" },
+  { value: "transporte", label: "Transporte" },
+  { value: "seguros", label: "Seguros" },
+  { value: "servicos", label: "Serviços" },
+  { value: "familia", label: "Família" },
+  { value: "outros", label: "Outros" }
+];
+const expensePaymentMethodLabel = Object.fromEntries(expensePaymentMethods.map((item) => [item.value, item.label])) as Record<ExpensePaymentMethod, string>;
+const expenseCategoryLabel = Object.fromEntries(expenseCategories.map((item) => [item.value, item.label])) as Record<ExpenseCategory, string>;
 
 export default function Home() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -82,7 +110,7 @@ export default function Home() {
   const [manualIncomeSources, setManualIncomeSources] = useState<ManualIncomeSource[]>(seedManualIncomeSources);
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>([]);
   const [incomeForm, setIncomeForm] = useState({ name: "", monthlyAmount: "" });
-  const [expenseForm, setExpenseForm] = useState({ name: "", monthlyAmount: "" });
+  const [expenseForm, setExpenseForm] = useState({ name: "", monthlyAmount: "", paymentMethod: "cartao" as ExpensePaymentMethod, category: "outros" as ExpenseCategory });
   const [csv, setCsv] = useState("");
   const [preview, setPreview] = useState<ImportState>(null);
   const [filter, setFilter] = useState("");
@@ -481,8 +509,8 @@ export default function Home() {
     const name = expenseForm.name.trim();
     const monthlyAmount = parseBrazilianMoney(expenseForm.monthlyAmount);
     if (!name || monthlyAmount <= 0) return;
-    setFixedExpenses((current) => [...current, { id: makeId("expense"), name, monthlyAmount, status: "ativo" }]);
-    setExpenseForm({ name: "", monthlyAmount: "" });
+    setFixedExpenses((current) => [...current, { id: makeId("expense"), name, monthlyAmount, status: "ativo", paymentMethod: expenseForm.paymentMethod, category: expenseForm.category }]);
+    setExpenseForm({ name: "", monthlyAmount: "", paymentMethod: expenseForm.paymentMethod, category: expenseForm.category });
   }
 
   function updateFixedExpense(id: string, patch: Partial<FixedExpense>) {
@@ -792,11 +820,11 @@ function IncomeSourcesScreen(props: {
 }
 
 function FixedExpensesScreen(props: {
-  expenseForm: { name: string; monthlyAmount: string };
+  expenseForm: { name: string; monthlyAmount: string; paymentMethod: ExpensePaymentMethod; category: ExpenseCategory };
   fixedExpenses: FixedExpense[];
   fixedMonthlyTotal: number;
   onAddExpense: () => void;
-  onExpenseFormChange: (value: { name: string; monthlyAmount: string }) => void;
+  onExpenseFormChange: (value: { name: string; monthlyAmount: string; paymentMethod: ExpensePaymentMethod; category: ExpenseCategory }) => void;
   onExpenseUpdate: (id: string, patch: Partial<FixedExpense>) => void;
 }) {
   const inactiveTotal = props.fixedExpenses.filter((expense) => expense.status === "inativo").reduce((sum, expense) => sum + expense.monthlyAmount, 0);
@@ -811,9 +839,11 @@ function FixedExpensesScreen(props: {
 
       <section className="rounded-md border border-border bg-card p-4">
         <div className="mb-3"><h3 className="font-semibold">Adicionar gasto fixo</h3><p className="text-sm text-muted-foreground">Compromissos recorrentes entram no dashboard como redutor da média mensal.</p></div>
-        <div className="grid gap-2 sm:grid-cols-[1fr_12rem_auto]">
+        <div className="grid gap-2 lg:grid-cols-[1fr_12rem_12rem_14rem_auto]">
           <input className="h-9 rounded-md border border-border bg-background px-3 text-sm" placeholder="Nome do gasto" value={props.expenseForm.name} onChange={(event) => props.onExpenseFormChange({ ...props.expenseForm, name: event.target.value })} />
           <input className="h-9 rounded-md border border-border bg-background px-3 text-right text-sm tabular" placeholder="Valor mensal" value={props.expenseForm.monthlyAmount} onChange={(event) => props.onExpenseFormChange({ ...props.expenseForm, monthlyAmount: event.target.value })} />
+          <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={props.expenseForm.category} onChange={(event) => props.onExpenseFormChange({ ...props.expenseForm, category: event.target.value as ExpenseCategory })}>{expenseCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <select className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={props.expenseForm.paymentMethod} onChange={(event) => props.onExpenseFormChange({ ...props.expenseForm, paymentMethod: event.target.value as ExpensePaymentMethod })}>{expensePaymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <button className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground" onClick={props.onAddExpense}><Plus size={16} /> Adicionar</button>
         </div>
       </section>
@@ -821,10 +851,14 @@ function FixedExpensesScreen(props: {
       <section className="rounded-md border border-border bg-card">
         <div className="border-b border-border p-4"><h3 className="font-semibold">Gastos fixos</h3><p className="text-sm text-muted-foreground">Ative, pause e edite os custos mensais recorrentes.</p></div>
         <div className="overflow-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="bg-muted text-xs text-muted-foreground"><tr><th className="px-3 py-2 text-left">Gasto</th><th className="px-3 py-2 text-right">Mensal</th><th className="px-3 py-2 text-left">Status</th></tr></thead>
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="bg-muted text-xs text-muted-foreground"><tr><th className="px-3 py-2 text-left">Gasto</th><th className="px-3 py-2 text-left">Categoria</th><th className="px-3 py-2 text-left">Como é pago</th><th className="px-3 py-2 text-right">Mensal</th><th className="px-3 py-2 text-left">Status</th></tr></thead>
             <tbody>
-              {props.fixedExpenses.length === 0 ? <tr><td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">Nenhum gasto fixo cadastrado.</td></tr> : props.fixedExpenses.map((expense) => <tr key={expense.id} className="border-t border-border"><td className="px-3 py-2"><input className="h-8 w-full rounded-sm border border-border bg-background px-2" value={expense.name} onChange={(event) => props.onExpenseUpdate(expense.id, { name: event.target.value })} /></td><td className="px-3 py-2 text-right"><input className="h-8 w-32 rounded-sm border border-border bg-background px-2 text-right tabular" value={expense.monthlyAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={(event) => props.onExpenseUpdate(expense.id, { monthlyAmount: parseBrazilianMoney(event.target.value) })} /></td><td className="px-3 py-2"><button className={expense.status === "ativo" ? "h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" : "h-8 rounded-md border border-border px-3 text-xs text-muted-foreground"} onClick={() => props.onExpenseUpdate(expense.id, { status: expense.status === "ativo" ? "inativo" : "ativo" })}>{expense.status === "ativo" ? "Ativo" : "Reativar"}</button></td></tr>)}
+              {props.fixedExpenses.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">Nenhum gasto fixo cadastrado.</td></tr> : props.fixedExpenses.map((expense) => {
+                const category = expense.category ?? "outros";
+                const paymentMethod = expense.paymentMethod ?? "outro";
+                return <tr key={expense.id} className="border-t border-border"><td className="px-3 py-2"><input className="h-8 w-full rounded-sm border border-border bg-background px-2" value={expense.name} onChange={(event) => props.onExpenseUpdate(expense.id, { name: event.target.value })} /></td><td className="px-3 py-2"><select className="h-8 w-40 rounded-sm border border-border bg-background px-2" value={category} onChange={(event) => props.onExpenseUpdate(expense.id, { category: event.target.value as ExpenseCategory })}>{expenseCategories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></td><td className="px-3 py-2"><select className="h-8 w-44 rounded-sm border border-border bg-background px-2" value={paymentMethod} onChange={(event) => props.onExpenseUpdate(expense.id, { paymentMethod: event.target.value as ExpensePaymentMethod })}>{expensePaymentMethods.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></td><td className="px-3 py-2 text-right"><input className="h-8 w-32 rounded-sm border border-border bg-background px-2 text-right tabular" value={expense.monthlyAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={(event) => props.onExpenseUpdate(expense.id, { monthlyAmount: parseBrazilianMoney(event.target.value) })} /></td><td className="px-3 py-2"><button className={expense.status === "ativo" ? "h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground" : "h-8 rounded-md border border-border px-3 text-xs text-muted-foreground"} onClick={() => props.onExpenseUpdate(expense.id, { status: expense.status === "ativo" ? "inativo" : "ativo" })}>{expense.status === "ativo" ? "Ativo" : "Reativar"}</button></td></tr>;
+              })}
             </tbody>
           </table>
         </div>
