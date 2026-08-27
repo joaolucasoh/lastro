@@ -2,7 +2,7 @@
 set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-TARGET_DIR="${1:-${LASTRO_INSTALL_DIR:-$HOME/LastroServer}}"
+TARGET_DIR="${1:-${LASTRO_INSTALL_DIR:-$HOME/Developer/LastroServer}}"
 TARGET_APP_DIR="$TARGET_DIR/app"
 TARGET_DATA_DIR="${LASTRO_TARGET_DATA_DIR:-$HOME/LastroData}"
 if ! command -v node >/dev/null 2>&1; then
@@ -13,15 +13,16 @@ if ! command -v npm >/dev/null 2>&1; then
   echo "npm não encontrado. Instale Node.js no Mac servidor." >&2
   exit 1
 fi
-if ! node -e "require('node:sqlite'); const major = Number(process.versions.node.split('.')[0]); if (major < 22) process.exit(1)" >/dev/null 2>&1; then
-  echo "Node.js incompatível. O Lastro precisa de Node 22+ com node:sqlite." >&2
-  echo "No Mac servidor, rode: brew update && brew reinstall node" >&2
+if ! node -e "require('node:sqlite'); const major = Number(process.versions.node.split('.')[0]); if (major < 22 || major >= 25) process.exit(1)" >/dev/null 2>&1; then
+  echo "Node.js incompatível. O Lastro precisa de Node LTS 22 ou 24 com node:sqlite." >&2
+  echo "Node 25 ainda é current e pode quebrar o npm, como no erro minipass-collect." >&2
+  echo "No Mac servidor, rode: brew install node@24 && brew unlink node && brew link --overwrite --force node@24" >&2
   echo "Depois confira: node -v && npm -v" >&2
   exit 1
 fi
 if ! npm --version >/dev/null 2>&1; then
   echo "npm está instalado, mas falhou ao iniciar. Isso costuma ser Node/npm incompatível ou instalação corrompida." >&2
-  echo "No Mac servidor, rode: brew update && brew reinstall node" >&2
+  echo "No Mac servidor, rode: brew install node@24 && brew unlink node && brew link --overwrite --force node@24" >&2
   echo "Depois abra um terminal novo e confira: node -v && npm -v" >&2
   exit 1
 fi

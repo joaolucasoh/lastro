@@ -20,28 +20,28 @@ SelfHostedServer/install-server.sh
 Por padrão instala em:
 
 ```text
-~/LastroServer
+~/Developer/LastroServer
 ~/LastroData
 ```
 
 ## Operar
 
 ```sh
-~/LastroServer/lastroctl.sh status
-~/LastroServer/lastroctl.sh logs
-~/LastroServer/lastroctl.sh restart
-~/LastroServer/lastroctl.sh stop
-~/LastroServer/lastroctl.sh start
+~/Developer/LastroServer/lastroctl.sh status
+~/Developer/LastroServer/lastroctl.sh logs
+~/Developer/LastroServer/lastroctl.sh restart
+~/Developer/LastroServer/lastroctl.sh stop
+~/Developer/LastroServer/lastroctl.sh start
 ```
 
 ## Acesso privado com Tailscale
 
 1. Instale Tailscale no MacBook servidor e nos seus dispositivos.
-2. Para acessar de outro dispositivo via Tailscale, edite `~/LastroServer/.env` e use `LASTRO_HOST=0.0.0.0`.
+2. Para acessar de outro dispositivo via Tailscale, edite `~/Developer/LastroServer/.env` e use `LASTRO_HOST=0.0.0.0`.
 3. Reinicie:
 
 ```sh
-~/LastroServer/lastroctl.sh restart
+~/Developer/LastroServer/lastroctl.sh restart
 ```
 
 Acesse pelo nome/IP Tailscale do Mac servidor:
@@ -71,11 +71,12 @@ which node
 which npm
 ```
 
-O Lastro precisa de Node 22+ com `node:sqlite`. Com Homebrew, a correção mais simples costuma ser:
+O Lastro precisa de Node LTS 22 ou 24 com `node:sqlite`. Evite Node 25 por enquanto; ele pode quebrar o npm nesse erro de `minipass-collect`. Com Homebrew, a correção mais simples costuma ser:
 
 ```sh
-brew update
-brew reinstall node
+brew install node@24
+brew unlink node
+brew link --overwrite --force node@24
 hash -r
 node -v
 npm -v
