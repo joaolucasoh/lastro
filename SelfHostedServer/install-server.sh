@@ -13,6 +13,18 @@ if ! command -v npm >/dev/null 2>&1; then
   echo "npm não encontrado. Instale Node.js no Mac servidor." >&2
   exit 1
 fi
+if ! node -e "require('node:sqlite'); const major = Number(process.versions.node.split('.')[0]); if (major < 22) process.exit(1)" >/dev/null 2>&1; then
+  echo "Node.js incompatível. O Lastro precisa de Node 22+ com node:sqlite." >&2
+  echo "No Mac servidor, rode: brew update && brew reinstall node" >&2
+  echo "Depois confira: node -v && npm -v" >&2
+  exit 1
+fi
+if ! npm --version >/dev/null 2>&1; then
+  echo "npm está instalado, mas falhou ao iniciar. Isso costuma ser Node/npm incompatível ou instalação corrompida." >&2
+  echo "No Mac servidor, rode: brew update && brew reinstall node" >&2
+  echo "Depois abra um terminal novo e confira: node -v && npm -v" >&2
+  exit 1
+fi
 mkdir -p "$TARGET_DIR" "$TARGET_APP_DIR" "$TARGET_DATA_DIR" "$TARGET_DIR/LaunchAgents"
 rsync -a --delete --exclude node_modules --exclude .next --exclude .git "$PROJECT_DIR/" "$TARGET_APP_DIR/"
 cp "$SCRIPT_DIR/start-server.sh" "$TARGET_DIR/start-server.sh"
@@ -30,7 +42,11 @@ EOF
 fi
 chmod +x "$TARGET_DIR/start-server.sh" "$TARGET_DIR/lastroctl.sh" "$TARGET_DIR/install-server.sh" "$TARGET_DIR/uninstall-server.sh"
 cd "$TARGET_APP_DIR"
-npm install
+if [ -f package-lock.json ]; then
+  npm ci
+else
+  npm install
+fi
 npm run build
 "$TARGET_DIR/lastroctl.sh" install
 "$TARGET_DIR/lastroctl.sh" start

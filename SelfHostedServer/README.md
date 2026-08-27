@@ -53,3 +53,36 @@ http://macbook-servidor:3030
 ## Backup
 
 Faça backup de `~/LastroData`. Time Machine já é suficiente para começar.
+
+## Troubleshooting: npm quebrado
+
+Se aparecer algo como:
+
+```text
+npm error Class extends value undefined is not a constructor or null
+```
+
+O problema está no Node/npm do Mac servidor, antes do Lastro instalar. Rode:
+
+```sh
+node -v
+npm -v
+which node
+which npm
+```
+
+O Lastro precisa de Node 22+ com `node:sqlite`. Com Homebrew, a correção mais simples costuma ser:
+
+```sh
+brew update
+brew reinstall node
+hash -r
+node -v
+npm -v
+```
+
+Depois rode novamente:
+
+```sh
+SelfHostedServer/install-server.sh
+```
