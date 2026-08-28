@@ -755,7 +755,7 @@ function Dashboard({ activeContracts, contractsForYear, fiscalStatuses, fixedMon
       </section>
 
       <section className="rounded-md border border-border bg-card p-4">
-        <div className="mb-4"><h3 className="font-semibold">Notas e impostos</h3><p className="text-sm text-muted-foreground">Clique no mês para avançar: sem cor, amarelo, verde.</p></div>
+        <div className="mb-4"><h3 className="font-semibold">Notas e impostos</h3><p className="text-sm text-muted-foreground">Valores consideram apenas recebimentos de contratos. Clique no mês para avançar o status.</p></div>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 xl:grid-cols-12">
           {months.map((month, index) => {
             const key = monthDate(year, index);
@@ -765,7 +765,7 @@ function Dashboard({ activeContracts, contractsForYear, fiscalStatuses, fixedMon
               <button key={month} className={"rounded-md border p-3 text-left transition hover:border-primary " + className} onClick={() => onFiscalStatusCycle(index)}>
                 <span className="block text-xs font-semibold uppercase">{month.slice(0, 3)}</span>
                 <span className="mt-1 block text-[11px]">{fiscalStatusLabel[status]}</span>
-                <span className="mt-2 block text-xs font-semibold tabular">{formatBRL(incomeMonthTotals[index])}</span>
+                <span className="mt-2 block text-xs font-semibold tabular">{formatBRL(monthTotals[index])}</span>
               </button>
             );
           })}
